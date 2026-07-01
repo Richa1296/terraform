@@ -8,10 +8,11 @@ terraform {
 }
 provider "google" {
   project = "payments-dev-495611"
-  region = "us-cenral1"
+  region = "us-central1"
   zone = "us-central1-a"
 }
 
 resource "google_storage_bucket" "GCS1"{
-  name = "bucket_from_terraform"
+  name = "bucket_from_terraform_initial_commit"
+  location = "US-CENTRAL1"
 }
