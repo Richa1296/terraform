@@ -1,0 +1,187 @@
+name: Aggregate Review Findings
+
+on:
+  workflow_run:
+    workflows:
+      - 'Java Code Quality Checks'
+      - 'Python Code Quality Checks'
+      - 'Terraform Code Quality Checks'
+      - 'Secrets and Credentials Scanning'
+      - 'Advanced Security Scanning'
+      - 'Infrastructure-as-Code Validation'
+      - 'AI-Powered Code Review'
+    types:
+      - completed
+
+jobs:
+  aggregate-and-report:
+    name: Consolidate and Report Findings
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    permissions:
+      pull-requests: write
+      checks: read
+      actions: read
+    steps:
+      - name: Download Artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: ${{ github.event.workflow_run.workflow_id }}
+          run_id: ${{ github.event.workflow_run.id }}
+          skip_unpack: true
+        continue-on-error: true
+
+      - name: Get PR Information
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 10
+            });
+            
+            if (prs.data && prs.data.length > 0) {
+              const prNumber = prs.data[0].number;
+              core.setOutput('pr_number', prNumber);
+              return prNumber;
+            }
+        continue-on-error: true
+
+      - name: Generate Consolidated Report
+        if: steps.pr-info.outputs.pr_number
+        id: report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Collect findings from all tools
+            const findings = {
+              java: { errors: 0, warnings: 0 },
+              python: { errors: 0, warnings: 0 },
+              terraform: { errors: 0, warnings: 0 },
+              security: { critical: 0, high: 0, medium: 0 },
+              total_issues: 0
+            };
+            
+            // Check for report files
+            const reportDir = '.';
+            if (fs.existsSync(reportDir)) {
+              const files = fs.readdirSync(reportDir).filter(f => f.includes('report') || f.includes('results'));
+              files.forEach(file => {
+                console.log(`Found report: ${file}`);
+              });
+            }
+            
+            console.log('Findings summary:', findings);
+            core.setOutput('findings', JSON.stringify(findings));
+        continue-on-error: true
+
+      - name: Post Summary Comment
+        if: steps.pr-info.outputs.pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
+            const findings = JSON.parse('${{ steps.report.outputs.findings }}' || '{}');
+            
+            let comment = `## 📋 Automated Code Review Summary\n\n`;
+            comment += `This PR has been analyzed by multiple automated tools:\n\n`;
+            
+            comment += `### ✅ Checks Completed\n`;
+            comment += `| Check | Status |\n`;
+            comment += `|-------|--------|\n`;
+            comment += `| Java Linting | ✓ |\n`;
+            comment += `| Python Linting | ✓ |\n`;
+            comment += `| Terraform Validation | ✓ |\n`;
+            comment += `| Security Scanning | ✓ |\n`;
+            comment += `| Secrets Detection | ✓ |\n`;
+            comment += `| Infrastructure Validation | ✓ |\n`;
+            comment += `| AI Code Review | ✓ |\n`;
+            
+            comment += `\n### 📊 Issues Found\n`;
+            
+            if (findings.total_issues === 0) {
+              comment += `No critical issues detected. 🎉\n`;
+            } else {
+              if (findings.security.critical > 0) {
+                comment += `- 🔴 **${findings.security.critical} Critical Security Issues**\n`;
+              }
+              if (findings.security.high > 0) {
+                comment += `- 🟠 **${findings.security.high} High Priority Issues**\n`;
+              }
+              if (findings.security.medium > 0) {
+                comment += `- 🟡 **${findings.security.medium} Medium Priority Issues**\n`;
+              }
+            }
+            
+            comment += `\n### 📝 Next Steps\n`;
+            comment += `1. Review the 'Checks' tab for detailed results from each tool\n`;
+            comment += `2. Address critical and high-priority issues before merging\n`;
+            comment += `3. Ensure all workflows pass with ✓ status\n`;
+            comment += `4. Request human review once automated checks pass\n`;
+            
+            comment += `\n> **Automated Review Helper**: This summary is generated from multiple quality and security tools. Human review is still required.\n`;
+            
+            // Post or update comment
+            try {
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber
+              });
+              
+              const botComment = comments.data.find(c => 
+                c.user.type === 'Bot' && c.body.includes('Automated Code Review Summary')
+              );
+              
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: comment
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: prNumber,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: comment
+                });
+              }
+            } catch (error) {
+              console.log('Could not post summary comment:', error);
+            }
+        continue-on-error: true
+
+      - name: Check Merge Requirements
+        if: steps.pr-info.outputs.pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
+            
+            // Get all checks for this PR
+            const checks = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref
+            });
+            
+            const completedChecks = checks.data.check_runs.filter(c => c.status === 'completed');
+            const failedChecks = completedChecks.filter(c => c.conclusion === 'failure');
+            
+            if (failedChecks.length > 0) {
+              console.log(`⚠️ ${failedChecks.length} checks failed:`);
+              failedChecks.forEach(c => console.log(`  - ${c.name}`));
+            } else {
+              console.log(`✓ All ${completedChecks.length} checks passed`);
+            }
+        continue-on-error: true

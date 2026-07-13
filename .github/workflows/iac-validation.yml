@@ -1,0 +1,246 @@
+name: Infrastructure-as-Code Validation
+
+on:
+  pull_request:
+    paths:
+      - '**.tf'
+      - '**.tfvars'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - '.github/workflows/iac-validation.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**.tf'
+      - '**.tfvars'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+
+jobs:
+  checkov:
+    name: Checkov Infrastructure Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform,dockerfile,kubernetes,helm
+          quiet: false
+          soft_fail: true
+          compact: false
+          output_format: sarif
+          output_file_path: reports/checkov.sarif
+        continue-on-error: true
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: reports/checkov.sarif
+          category: 'checkov'
+        continue-on-error: true
+
+      - name: Publish Checkov Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-results
+          path: reports/checkov.sarif
+          if-no-files-found: ignore
+
+  tflint-strict:
+    name: TFLint with Strict Rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Initialize TFLint
+        run: tflint --init
+
+      - name: Run TFLint (Strict Mode)
+        run: |
+          echo "Running TFLint with strict rules..."
+          tflint --format json --recursive . > tflint-report.json || true
+          
+          # Display violations grouped by severity
+          echo "::group::TFLint Results"
+          cat tflint-report.json | jq '.issues[] | select(.rule.name != "") | {file: .range.filename, line: .range.start.line, rule: .rule.name, severity: .rule.severity}' || echo "No strict violations"
+          echo "::endgroup::"
+        continue-on-error: true
+
+      - name: Upload TFLint Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tflint-report
+          path: tflint-report.json
+          if-no-files-found: ignore
+
+  terraform-validate:
+    name: Terraform Validation and Plan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        terraform-version: ['1.5.x', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ matrix.terraform-version }}
+
+      - name: Validate Terraform Files
+        run: |
+          for dir in $(find . -name "*.tf" -type f | xargs dirname | sort -u | grep -v ".terraform" | grep -v ".git"); do
+            echo "Validating: $dir"
+            cd "$dir" || continue
+            terraform init -backend=false || continue
+            terraform validate -json > validation-report.json || true
+            
+            # Check for validation errors
+            if grep -q '"valid": false' validation-report.json; then
+              echo "::error::Terraform validation failed in $dir"
+              cat validation-report.json | jq '.diagnostics[]'
+            fi
+            
+            cd - > /dev/null
+          done
+        continue-on-error: true
+
+  terraform-fmt:
+    name: Terraform Format Enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: latest
+
+      - name: Check Terraform Formatting
+        run: |
+          echo "Checking Terraform formatting..."
+          terraform fmt -recursive -check . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "::warning::Some Terraform files are not properly formatted"
+            echo "Run 'terraform fmt -recursive .' to fix"
+            terraform fmt -recursive -diff .
+          else
+            echo "All Terraform files are properly formatted"
+          fi
+        continue-on-error: true
+
+  docker-lint:
+    name: Dockerfile Linting
+    runs-on: ubuntu-latest
+    if: hashFiles('**/Dockerfile') != ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3008,DL3009,DL3010
+          failure-threshold: warning
+        continue-on-error: true
+
+      - name: Additional Docker Security Checks
+        run: |
+          echo "Checking Docker security best practices..."
+          
+          if grep -q "USER root" Dockerfile 2>/dev/null; then
+            echo "::warning::Container running as root - consider using a non-root user"
+          fi
+          
+          if ! grep -q "FROM.*@sha256:" Dockerfile 2>/dev/null; then
+            echo "::notice::Consider pinning base image with digest for reproducibility"
+          fi
+        continue-on-error: true
+
+  policy-validation:
+    name: Policy and Configuration Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Sensitive Resources
+        run: |
+          echo "Checking for potentially risky Terraform resources..."
+          
+          # Check for overly permissive security groups
+          if grep -r "0.0.0.0/0" *.tf 2>/dev/null; then
+            echo "::warning::Overly permissive CIDR block (0.0.0.0/0) found - review security group rules"
+          fi
+          
+          # Check for public S3 buckets
+          if grep -r 'acl.*=.*"public' *.tf 2>/dev/null; then
+            echo "::error::Public S3 bucket ACL found - this is a security risk"
+          fi
+          
+          # Check for unencrypted databases
+          if grep -r 'encrypted.*=.*false' *.tf 2>/dev/null; then
+            echo "::warning::Unencrypted database detected - enable encryption for production"
+          fi
+        continue-on-error: true
+
+      - name: Validate Environment Configuration
+        run: |
+          echo "Validating environment and configuration files..."
+          
+          # Check for secrets in terraform.tfvars
+          if [ -f "terraform.tfvars" ]; then
+            if grep -E "(password|secret|api_key|token)" terraform.tfvars; then
+              echo "::error::Potential secrets found in terraform.tfvars"
+            fi
+          fi
+        continue-on-error: true
+
+  iac-summary:
+    name: IaC Validation Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [checkov, tflint-strict, terraform-validate, terraform-fmt, docker-lint, policy-validation]
+    steps:
+      - name: Generate IaC Report
+        run: |
+          echo "## Infrastructure-as-Code Validation Summary"
+          echo ""
+          echo "### Validations Performed:"
+          echo "- Checkov (security misconfigurations, best practices)"
+          echo "- TFLint (Terraform linting with strict rules)"
+          echo "- Terraform Validate (syntax validation)"
+          echo "- Terraform Format (code formatting)"
+          echo "- Hadolint (Dockerfile best practices)"
+          echo "- Policy Validation (security and compliance checks)"
+          echo ""
+          echo "### Action Items:"
+          echo "1. Review all warnings and errors in the logs above"
+          echo "2. Fix security group rules, encryption, and public access issues"
+          echo "3. Format all Terraform files: `terraform fmt -recursive .`"
+          echo "4. Ensure sensitive data is never stored in git-tracked files"

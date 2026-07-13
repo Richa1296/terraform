@@ -1,0 +1,65 @@
+version: 2
+updates:
+  # Enable version updates for Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "code-owners"
+    allow:
+      - dependency-type: "production"
+    ignore:
+      - dependency-name: "setuptools"
+        versions: ["65.5.0"]
+
+  # Enable version updates for Java dependencies (if pom.xml exists)
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "code-owners"
+    allow:
+      - dependency-type: "production"
+
+  # Enable version updates for Gradle (if build.gradle exists)
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:30"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "code-owners"
+    allow:
+      - dependency-type: "production"
+
+  # Enable version updates for Terraform
+  - package-ecosystem: "terraform"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "code-owners"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: ".github/workflows"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "code-owners"
