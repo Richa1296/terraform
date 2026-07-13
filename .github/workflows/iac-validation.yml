@@ -1,22 +1,8 @@
 name: Infrastructure-as-Code Validation
 
+# Disabled — use pr-review.yml instead
 on:
-  pull_request:
-    paths:
-      - '**.tf'
-      - '**.tfvars'
-      - 'docker-compose.yml'
-      - 'Dockerfile'
-      - '.github/workflows/iac-validation.yml'
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - '**.tf'
-      - '**.tfvars'
-      - 'docker-compose.yml'
-      - 'Dockerfile'
+  workflow_dispatch:
 
 jobs:
   checkov:

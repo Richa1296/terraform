@@ -1,20 +1,8 @@
 name: Terraform Code Quality Checks
 
+# Disabled — use pr-review.yml instead
 on:
-  pull_request:
-    paths:
-      - '**.tf'
-      - '**.tfvars'
-      - '.terraform.lock.hcl'
-      - '.github/workflows/terraform-checks.yml'
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - '**.tf'
-      - '**.tfvars'
-      - '.terraform.lock.hcl'
+  workflow_dispatch:
 
 jobs:
   terraform-fmt:

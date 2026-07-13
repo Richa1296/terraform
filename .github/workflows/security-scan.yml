@@ -1,17 +1,8 @@
 name: Advanced Security Scanning
 
+# Disabled — use pr-review.yml instead
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-  push:
-    branches:
-      - main
-      - develop
-  schedule:
-    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   trivy-fs:

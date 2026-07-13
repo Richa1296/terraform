@@ -1,20 +1,8 @@
 name: Java Code Quality Checks
 
+# Disabled — use pr-review.yml instead (simpler team-lead review)
 on:
-  pull_request:
-    paths:
-      - '**.java'
-      - 'pom.xml'
-      - 'build.gradle'
-      - '.github/workflows/java-checks.yml'
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - '**.java'
-      - 'pom.xml'
-      - 'build.gradle'
+  workflow_dispatch:
 
 jobs:
   checkstyle:

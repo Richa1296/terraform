@@ -1,15 +1,8 @@
 name: SonarQube Code Quality Analysis
 
+# Disabled — use pr-review.yml instead (or re-enable if you use SonarCloud)
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-  push:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
 
 jobs:
   sonar:

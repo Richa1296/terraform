@@ -1,19 +1,8 @@
 name: AI-Powered Code Review
 
+# Disabled — use pr-review.yml instead
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-    paths:
-      - '**.java'
-      - '**.py'
-      - '**.tf'
-
-concurrency:
-  group: ai-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  workflow_dispatch:
 
 jobs:
   ai-code-review:

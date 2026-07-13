@@ -1,22 +1,8 @@
 name: Python Code Quality Checks
 
+# Disabled — use pr-review.yml instead
 on:
-  pull_request:
-    paths:
-      - '**.py'
-      - 'requirements.txt'
-      - 'setup.py'
-      - 'pyproject.toml'
-      - '.github/workflows/python-checks.yml'
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - '**.py'
-      - 'requirements.txt'
-      - 'setup.py'
-      - 'pyproject.toml'
+  workflow_dispatch:
 
 jobs:
   pylint:

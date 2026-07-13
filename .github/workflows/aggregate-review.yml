@@ -1,17 +1,8 @@
 name: Aggregate Review Findings
 
+# Disabled — use pr-review.yml instead
 on:
-  workflow_run:
-    workflows:
-      - 'Java Code Quality Checks'
-      - 'Python Code Quality Checks'
-      - 'Terraform Code Quality Checks'
-      - 'Secrets and Credentials Scanning'
-      - 'Advanced Security Scanning'
-      - 'Infrastructure-as-Code Validation'
-      - 'AI-Powered Code Review'
-    types:
-      - completed
+  workflow_dispatch:
 
 jobs:
   aggregate-and-report:
