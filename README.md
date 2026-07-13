@@ -97,4 +97,4 @@ Edit `pr-review-system/scripts/run_pr_review.py` to:
 
 ## Questions?
 
-See **`pr-review-system/docs/TEAM_LEAD_REVIEW.md`** for details on what each check does.
+See [pr-review-system/docs/TEAM_LEAD_REVIEW.md](pr-review-system/docs/TEAM_LEAD_REVIEW.md) for details on what each check does.
